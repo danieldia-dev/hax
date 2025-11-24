@@ -27,8 +27,4 @@ def Loop.MonoLoopCombinator.forIn {β : Type u} {m : Type u → Type v} [Monad m
   partial_fixpoint monotonicity MonoLoopCombinator.mono
   loop init
 
-instance (priority:= high) {m : Type u → Type v} [Monad m] [∀ α, CCPO (m α)]
-    [∀ {β : Type u} (f : Unit → β → m (ForInStep β)), Loop.MonoLoopCombinator f] : ForIn m Loop Unit where
-  forIn := Loop.forIn
-
 end Lean
