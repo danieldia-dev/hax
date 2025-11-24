@@ -7,7 +7,7 @@ open Lean
 
 theorem Spec.forIn_monoLoopCombinator {m} {ps : PostShape} {β: Type}
     [Monad m] [∀ α, Order.CCPO (m α)] [WPMonad m ps]
-    (inv: β → Bool) (termination : β -> Nat) (init : β)
+    (inv: β → Prop) (termination : β -> Nat) (init : β)
     (loop : Loop)
     (f : Unit → β → m (ForInStep β)) [Loop.MonoLoopCombinator f]
     (inv_init : inv init)

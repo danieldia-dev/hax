@@ -13,6 +13,7 @@ import Std.Do.Triple
 import Std.Tactic.Do
 import Std.Tactic.Do.Syntax
 import Hax.MissingLean.Init.While
+import Hax.MissingLean.Std.Do.Triple.SpecLemmas
 
 open Std.Do
 open Std.Tactic
@@ -641,6 +642,89 @@ theorem Rust_primitives.Hax.Folds.usize.fold_range_spec {α}
 
 end Fold
 
+/-
+
+# Loops
+
+-/
+section Loop
+open Lean
+
+def Hax_lib.Int.Int : Type := _root_.Int
+def Rust_primitives.Hax.while_loop {State: Type}
+    (cond: State → RustM Bool)
+    (inv: State → RustM Bool)
+    (termination : State -> RustM Hax_lib.Int.Int)
+    (init : State)
+    (body : State -> RustM State) : RustM State :=
+  Loop.MonoLoopCombinator.forIn .mk init fun () s => do
+    if ← cond s then
+      let s ← body s
+      pure (.yield s)
+    else
+      pure (.done s)
+
+theorem Rust_primitives.Hax.while_loop.spec {State: Type}
+    (cond: State → RustM Bool)
+    (inv: State → RustM Bool)
+    (inv': State → Bool)
+    (inv_inv' : ∀ state,
+      ⊢ₛ wp⟦ inv state ⟧ (⇓ r => ⌜ inv' state ⌝ ))
+    (termination : State -> RustM Int)
+    (init : State)
+    (body : State -> RustM State)
+    (inv_init :
+      ⊢ₛ wp⟦ inv init ⟧ (⇓ r => ⌜ ↑r ⌝ ))
+    (step : ∀ state,
+      inv' state →
+      ⊢ₛ wp⟦
+          do
+            if (← cond state) then
+              let state' ← (body state)
+              let m ← (termination state)
+              let m' ← (termination state')
+              pure ((← inv state') ∧ 0 ≤ m' ∧ m' < m)
+            else
+              pure true
+          ⟧ ( ⇓ r => ⌜ ↑r ⌝)) :
+    ⊢ₛ wp⟦Rust_primitives.Hax.while_loop cond inv termination init body⟧
+      (⇓ state' => ⌜
+        (⊢ₛ wp⟦inv state'⟧ (⇓ r => ⌜ r ⌝)) ∧ (⊢ₛ wp⟦cond state'⟧ ( ⇓ r => ⌜ ¬r ⌝)) ⌝) := by
+  have inv'_init : inv' init := sorry
+  apply SPred.entails.trans (step init inv'_init)
+  change  _ ⊢ₛ wp⟦Loop.MonoLoopCombinator.forIn.loop _ init⟧ _
+  unfold Loop.MonoLoopCombinator.forIn.loop
+  change  _ ⊢ₛ wp⟦bind _ _⟧ _
+  simp only [WP.bind]
+  apply (wp _).mono _ _ (PostCond.entails.of_left_entails ?_)
+  intro c
+  cases h : c
+  case false =>
+    simp only [Bool.false_eq_true, ↓reduceIte, WP.pure, SPred.entails_nil,
+      SPred.down_pure, forall_const, Bool.not_eq_true]
+    constructor
+    · apply inv_init
+      simp only [SPred.down_pure]
+    · have := step init inv'_init
+      sorry
+  case true =>
+    rw [← WP.bind]
+    simp only [↓reduceIte]
+    rw [bind_assoc]
+    simp only [pure_bind]
+    rw [WP.bind]
+    rw [WP.bind]
+    apply (wp _).mono _ _ (PostCond.entails.of_left_entails ?_)
+    intro s
+    apply SPred.pure_elim'
+    intro h
+    exact Rust_primitives.Hax.while_loop.spec cond inv inv' inv_inv' termination s body sorry sorry
+termination_by termination init
+decreasing_by
+  simp only [WP.bind] at h
+  sorry --exact h.2
+
+end Loop
 /-
 
 # Arrays
