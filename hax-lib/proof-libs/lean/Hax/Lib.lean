@@ -12,6 +12,7 @@ import Std
 import Std.Do.Triple
 import Std.Tactic.Do
 import Std.Tactic.Do.Syntax
+import Hax.MissingLean.Init.While
 
 open Std.Do
 open Std.Tactic
@@ -142,9 +143,10 @@ instance {α} : Coe (RustM (RustM α)) (RustM α) where
   | .div => .div
 
 section Order
-/- These instances are required to use `partial_fixpoint` in the `RustM` monad. -/
 
 open Lean.Order
+
+/- These instances are required to use `partial_fixpoint` in the `RustM` monad. -/
 
 instance {α} : PartialOrder (RustM α) := inferInstanceAs (PartialOrder (FlatOrder RustM.div))
 
@@ -161,6 +163,14 @@ noncomputable instance : MonoBind RustM where
     · exact h _
     · exact FlatOrder.rel.refl
     · exact FlatOrder.rel.refl
+
+open Lean Order in
+/-- For while loops in `RustM`: -/
+instance {β : Type} (f : Unit → β → RustM (ForInStep β)) : Loop.MonoLoopCombinator f := {
+  mono := by
+    unfold Loop.loopCombinator
+    repeat monotonicity
+}
 
 end Order
 
