@@ -141,6 +141,28 @@ instance {α} : Coe (RustM (RustM α)) (RustM α) where
   | .fail e => .fail e
   | .div => .div
 
+section Order
+/- These instances are required to use `partial_fixpoint` in the `RustM` monad. -/
+
+open Lean.Order
+
+instance {α} : PartialOrder (RustM α) := inferInstanceAs (PartialOrder (FlatOrder RustM.div))
+
+noncomputable instance {α} : CCPO (RustM α) := inferInstanceAs (CCPO (FlatOrder RustM.div))
+
+/-- This instance is required to use `partial_fixpoint` in the `RustM` monad. -/
+noncomputable instance : MonoBind RustM where
+  bind_mono_left h := by
+    cases h
+    · exact FlatOrder.rel.bot
+    · exact FlatOrder.rel.refl
+  bind_mono_right h := by
+    cases ‹RustM _›
+    · exact h _
+    · exact FlatOrder.rel.refl
+    · exact FlatOrder.rel.refl
+
+end Order
 
 end RustM
 
