@@ -116,7 +116,7 @@ macro "declare_Hax_int_ops" s:(&"signed" <|> &"unsigned") typeName:ident width:t
   )
   if signed then
     cmds := cmds.append $ ← Syntax.getArgs <$> `(
-      /- Division of signed Rust integers. Panics on overflow (when x is IntMin and `y = -1`)
+      /-- Division of signed Rust integers. Panics on overflow (when x is IntMin and `y = -1`)
         and when dividing by zero. -/
       instance : HaxDiv $typeName where
         div x y :=
@@ -124,31 +124,13 @@ macro "declare_Hax_int_ops" s:(&"signed" <|> &"unsigned") typeName:ident width:t
           else if y = 0 then .fail .divisionByZero
           else pure (x / y)
 
-      /- Remainder of signed Rust integers. Panics on overflow (when x is IntMin and `y = -1`)
+      /-- Remainder of signed Rust integers. Panics on overflow (when x is IntMin and `y = -1`)
         and when the modulus is zero. -/
       instance : HaxRem $typeName where
         rem x y :=
           if BitVec.sdivOverflow x.toBitVec y.toBitVec then .fail .integerOverflow
           else if y = 0 then .fail .divisionByZero
           else pure (x % y)
-
-      /- Right shifting on signed integers. Panics when shifting by a negative number,
-        or when shifting by more than the size. -/
-      instance : HaxShiftRight $typeName $typeName where
-        shiftRight x y :=
-          if 0 ≤ y.toInt && y.toInt < Int.ofNat $width then
-            pure (x >>> y)
-          else
-            .fail .integerOverflow
-
-      /- Left shifting on signed integers. Panics when shifting by a negative number,
-        or when shifting by more than the size. -/
-      instance : HaxShiftLeft $typeName $typeName where
-        shiftLeft x y :=
-          if 0 ≤ y.toInt && y.toInt < Int.ofNat $width then
-            pure (x <<< y)
-          else
-            .fail .integerOverflow
     )
   else -- unsigned
     cmds := cmds.append $ ← Syntax.getArgs <$> `(
@@ -163,18 +145,6 @@ macro "declare_Hax_int_ops" s:(&"signed" <|> &"unsigned") typeName:ident width:t
         rem x y :=
           if y = 0 then .fail .divisionByZero
           else pure (x % y)
-
-      /-- Right shift on unsigned Rust integers. Panics when shifting by more than the size. -/
-      instance: HaxShiftRight $typeName $typeName where
-        shiftRight x y :=
-          if $width ≤ y.toNat then .fail .integerOverflow
-          else pure (x >>> y)
-
-      /-- Left shift on unsigned Rust integers. Panics when shifting by more than the size. -/
-      instance: HaxShiftLeft $typeName $typeName where
-        shiftLeft x y :=
-          if $width ≤ y.toNat then .fail .integerOverflow
-          else pure (x <<< y)
     )
   return ⟨mkNullNode cmds⟩
 
@@ -188,6 +158,54 @@ declare_Hax_int_ops signed Int16 16
 declare_Hax_int_ops signed Int32 32
 declare_Hax_int_ops signed Int64 64
 declare_Hax_int_ops signed ISize System.Platform.numBits
+
+open Lean in
+macro "declare_Hax_shift_ops" : command => do
+  let mut cmds := #[]
+  let tys := [
+    ("UInt8", ← `(term| 8)),
+    ("UInt16", ← `(term| 16)),
+    ("UInt32", ← `(term| 32)),
+    ("UInt64", ← `(term| 64)),
+    ("USize", ← `(term| OfNat.ofNat System.Platform.numBits)),
+    ("Int8", ← `(term| 8)),
+    ("Int16", ← `(term| 16)),
+    ("Int32", ← `(term| 32)),
+    ("Int64", ← `(term| 64)),
+    ("ISize", ← `(term| OfNat.ofNat System.Platform.numBits))
+  ]
+  for (ty1, width1) in tys do
+    for (ty2, width2) in tys do
+
+      let ty1Ident := mkIdent ty1.toName
+      let ty2Ident := mkIdent ty2.toName
+      let toTy1 := mkIdent ("to" ++ ty1).toName
+      let ty2Signed := ty2.startsWith "I"
+      let ty2ToNat := mkIdent (if ty2Signed then `toNatClampNeg else `toNat)
+      let yConverted ← if ty1 == ty2 then `(y) else `(y.$ty2ToNat.$toTy1)
+
+      cmds := cmds.push $ ← `(
+        /-- Shift right for Rust integers. Panics when shifting by a negative number or
+          by the bitsize or more. -/
+        instance : HaxShiftRight $ty1Ident $ty2Ident where
+          shiftRight x y :=
+            if 0 ≤ y && y < $width1
+            then pure (x >>> $yConverted)
+            else .fail .integerOverflow
+
+        /-- Left shifting on signed integers. Panics when shifting by a negative number,
+          or when shifting by more than the size. -/
+        instance : HaxShiftLeft $ty1Ident $ty2Ident where
+          shiftLeft x y :=
+            if 0 ≤ y && y < $width1
+            then pure (x <<< $yConverted)
+            else
+              .fail .integerOverflow
+      )
+  return ⟨mkNullNode cmds⟩
+
+declare_Hax_shift_ops
+
 
 /- Check that all operations are implemented -/
 
@@ -210,17 +228,3 @@ instance : Operations i16 where
 instance : Operations i32 where
 instance : Operations i64 where
 instance : Operations isize where
-
--- Custom instances
-@[simp, spec]
-instance : HaxShiftRight u64 i32 where
-  shiftRight x y :=
-    if 0 ≤ y && y < 64 then pure (x >>> y.toNatClampNeg.toUInt64)
-    else .fail .integerOverflow
-
--- Custom instances
-@[simp, spec]
-instance : HaxShiftRight i64 i32 where
-  shiftRight x y :=
-    if 0 ≤ y && y < 64 then pure (x >>> y.toInt64)
-    else .fail .integerOverflow
