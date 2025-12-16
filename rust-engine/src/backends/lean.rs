@@ -988,8 +988,6 @@ set_option linter.unusedVariables false
                         ]
                         .group()
                         .nest(INDENT),
-                        hardline!(),
-                        hardline!(),
                         {
                             let spec = HasLinkedItemGraph::linked_item_graph(self)
                                 .fn_like_linked_expressions(item, None);
@@ -997,6 +995,8 @@ set_option linter.unusedVariables false
                                 nil!()
                             } else {
                                 docs![
+                                    hardline!(),
+                                    hardline!(),
                                     "@[spec]",
                                     hardline!(),
                                     docs![
